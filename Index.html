@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ロボットシミュレーション</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+  body { margin:0; font-family:Helvetica; text-align:center; background:#f0f0f0; }
+  canvas { border:1px solid gray; background:white; touch-action:none; margin-top:10px; }
+  .controls { margin-top:10px; display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
+  button, input { font-size:16px; padding:4px 6px; }
+</style>
+</head>
+<body>
+
+<h2>ロボットシミュレーション（タッチ・マウス対応）</h2>
+
+<canvas id="cv" width="768" height="600" style="width:768px;height:600px;"></canvas>
+
+<div class="controls">
+  <label>速度: <input type="range" id="speedSlider" min="0.5" max="10" step="0.1" value="3"><span id="speedVal">3.0</span></label>
+  <label>太さ: <input type="range" id="thick" min="1" max="10" step="1" value="3"></label>
+  <button id="startBtn">スタート</button>
+  <button id="resetBtn">リセット</button>
+</div>
+
+<script>
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+
+// ---------------- データ ----------------
+let allLines = [];
+let currentLine = null;
+let robot = null;
+let robotLine = null;
+let robotIndex = 0;
+let moving = false;
+let speed = 3.0;
+
+// ---------------- UI ----------------
+const speedSlider = document.getElementById("speedSlider");
+const speedVal = document.getElementById("speedVal");
+const thickSlider = document.getElementById("thick");
+
+speedSlider.oninput = ()=>{
+  speed = parseFloat(speedSlider.value);
+  speedVal.innerText = speed.toFixed(1);
+};
+thickSlider.oninput = draw;
+
+document.getElementById("startBtn").onclick = ()=>{
+  if(allLines.length === 0){ alert("線を描いてください"); return; }
+  robotLine = allLines[allLines.length-1];
+  robot = [...robotLine[0]];
+  robotIndex = 0;
+  moving = true;
+};
+
+document.getElementById("resetBtn").onclick = reset;
+
+// ---------------- 描画 ----------------
+function draw(){
+  ctx.clearRect(0,0,cv.width,cv.height);
+
+  // 完了線
+  ctx.strokeStyle = "blue";
+  ctx.lineWidth = parseInt(thickSlider.value);
+  for(let line of allLines){
+    if(line.length>1){
+      ctx.beginPath();
+      ctx.moveTo(line[0][0], line[0][1]);
+      for(let p of line) ctx.lineTo(p[0], p[1]);
+      ctx.stroke();
+    }
+  }
+
+  // 描画中線
+  if(currentLine && currentLine.length>1){
+    ctx.beginPath();
+    ctx.moveTo(currentLine[0][0], currentLine[0][1]);
+    for(let p of currentLine) ctx.lineTo(p[0], p[1]);
+    ctx.stroke();
+  }
+
+  // ロボット
+  if(robot){
+    ctx.fillStyle = "red";
+    ctx.beginPath();
+    ctx.arc(robot[0], robot[1], 12, 0, Math.PI*2);
+    ctx.fill();
+  }
+}
+
+// ---------------- 座標取得 ----------------
+function getPos(e){
+  const rect = cv.getBoundingClientRect();
+  if(e.touches && e.touches.length>0){
+    return [
+      e.touches[0].clientX - rect.left,
+      e.touches[0].clientY - rect.top
+    ];
+  } else {
+    return [
+      e.clientX - rect.left,
+      e.clientY - rect.top
+    ];
+  }
+}
+
+// ---------------- 描画イベント ----------------
+let drawing = false;
+
+function startDraw(e){
+  e.preventDefault();
+  drawing = true;
+  allLines = [];
+  currentLine = [];
+  robot = null;
+  robotLine = null;
+  robotIndex = 0;
+  moving = false;
+  currentLine.push(getPos(e));
+}
+
+function moveDraw(e){
+  if(!drawing) return;
+  e.preventDefault();
+  let pos = getPos(e);
+  let last = currentLine[currentLine.length-1];
+  if(Math.hypot(pos[0]-last[0], pos[1]-last[1])>2){
+    currentLine.push(pos);
+  }
+}
+
+function endDraw(e){
+  if(drawing && currentLine && currentLine.length>1){
+    allLines.push([...currentLine]);
+    robotLine = [...currentLine];
+    robot = [...currentLine[0]];
+    robotIndex = 0;
+  }
+  currentLine = null;
+  drawing = false;
+}
+
+// PC
+cv.addEventListener("mousedown", startDraw);
+cv.addEventListener("mousemove", moveDraw);
+cv.addEventListener("mouseup", endDraw);
+
+// タッチ
+cv.addEventListener("touchstart", startDraw, {passive:false});
+cv.addEventListener("touchmove", moveDraw, {passive:false});
+cv.addEventListener("touchend", endDraw);
+
+// ---------------- ロボット ----------------
+function updateRobot(){
+  if(!moving || !robot || !robotLine) return;
+  if(robotIndex >= robotLine.length-1){ moving=false; return; }
+  let next = robotLine[robotIndex+1];
+  let dx = next[0]-robot[0];
+  let dy = next[1]-robot[1];
+  let dist = Math.hypot(dx,dy);
+  if(dist<=speed){ robot=[...next]; robotIndex++; }
+  else{ robot=[robot[0]+dx/dist*speed, robot[1]+dy/dist*speed]; }
+}
+
+// ---------------- リセット ----------------
+function reset(){
+  allLines=[];
+  currentLine=null;
+  robot=null;
+  robotLine=null;
+  robotIndex=0;
+  moving=false;
+  draw();
+}
+
+// ---------------- ループ ----------------
+function loop(){
+  updateRobot();
+  draw();
+  requestAnimationFrame(loop);
+}
+
+loop();
+reset();
+</script>
+
+</body>
+</html>
