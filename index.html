@@ -1,191 +1,191 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-<meta charset="UTF-8">
-<title>ロボットシミュレーション</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<style>
-  body { margin:0; font-family:Helvetica; text-align:center; background:#f0f0f0; }
-  canvas { border:1px solid gray; background:white; touch-action:none; margin-top:10px; }
-  .controls { margin-top:10px; display:flex; flex-wrap:wrap; justify-content:center; gap:10px; }
-  button, input { font-size:16px; padding:4px 6px; }
-</style>
+  <meta charset="UTF-8">
+  <title>ロボットシミュレーション</title>
+  <style>
+    body { margin: 0; text-align: center; background: #fafafa; }
+    canvas { border: 1px solid #000; touch-action: none; background: #fff; }
+    .controls { margin-top: 8px; }
+    .controls label { margin: 0 8px; }
+  </style>
 </head>
 <body>
+  <h3>ロボットシミュレーション</h3>
+  <canvas id="canvas" width="600" height="400"></canvas>
+  <div class="controls">
+    <label>速度: <input type="range" id="speed" min="0.5" max="10" step="0.5" value="3"></label>
+    <label>線の太さ: <input type="range" id="lineWidth" min="1" max="10" step="1" value="3"></label>
+    <label>壁判定閾値: <input type="range" id="wallThreshold" min="0" max="255" step="5" value="50"></label>
+    <br>
+    <button id="start">スタート</button>
+    <button id="reset">リセット</button>
+    <input type="file" id="bgUpload" accept="image/*">
+  </div>
 
-<h2>ロボットシミュレーション（タッチ・マウス対応）</h2>
+  <script>
+    const canvas = document.getElementById("canvas");
+    const ctx = canvas.getContext("2d");
 
-<canvas id="cv" width="768" height="600" style="width:768px;height:600px;"></canvas>
+    let line = [];
+    let smoothLine = [];
+    let drawing = false;
+    let robot = null;
+    let moving = false;
+    let bgImage = null;
+    let bgData = null;
 
-<div class="controls">
-  <label>速度: <input type="range" id="speedSlider" min="0.5" max="10" step="0.1" value="3"><span id="speedVal">3.0</span></label>
-  <label>太さ: <input type="range" id="thick" min="1" max="10" step="1" value="3"></label>
-  <button id="startBtn">スタート</button>
-  <button id="resetBtn">リセット</button>
-</div>
+    const speedInput = document.getElementById("speed");
+    const lineWidthInput = document.getElementById("lineWidth");
+    const wallThresholdInput = document.getElementById("wallThreshold");
 
-<script>
-const cv = document.getElementById("cv");
-const ctx = cv.getContext("2d");
-
-// ---------------- データ ----------------
-let allLines = [];
-let currentLine = null;
-let robot = null;
-let robotLine = null;
-let robotIndex = 0;
-let moving = false;
-let speed = 3.0;
-
-// ---------------- UI ----------------
-const speedSlider = document.getElementById("speedSlider");
-const speedVal = document.getElementById("speedVal");
-const thickSlider = document.getElementById("thick");
-
-speedSlider.oninput = ()=>{
-  speed = parseFloat(speedSlider.value);
-  speedVal.innerText = speed.toFixed(1);
-};
-thickSlider.oninput = draw;
-
-document.getElementById("startBtn").onclick = ()=>{
-  if(allLines.length === 0){ alert("線を描いてください"); return; }
-  robotLine = allLines[allLines.length-1];
-  robot = [...robotLine[0]];
-  robotIndex = 0;
-  moving = true;
-};
-
-document.getElementById("resetBtn").onclick = reset;
-
-// ---------------- 描画 ----------------
-function draw(){
-  ctx.clearRect(0,0,cv.width,cv.height);
-
-  // 完了線
-  ctx.strokeStyle = "blue";
-  ctx.lineWidth = parseInt(thickSlider.value);
-  for(let line of allLines){
-    if(line.length>1){
-      ctx.beginPath();
-      ctx.moveTo(line[0][0], line[0][1]);
-      for(let p of line) ctx.lineTo(p[0], p[1]);
-      ctx.stroke();
+    function smooth(points, strength = 0.8) {
+      if (points.length < 3) return points;
+      const sm = [points[0]];
+      for (let i = 1; i < points.length - 1; i++) {
+        const x = points[i][0]*(1-strength) + 0.5*(points[i-1][0]+points[i+1][0])*strength;
+        const y = points[i][1]*(1-strength) + 0.5*(points[i-1][1]+points[i+1][1])*strength;
+        sm.push([x,y]);
+      }
+      sm.push(points[points.length-1]);
+      return sm;
     }
-  }
 
-  // 描画中線
-  if(currentLine && currentLine.length>1){
-    ctx.beginPath();
-    ctx.moveTo(currentLine[0][0], currentLine[0][1]);
-    for(let p of currentLine) ctx.lineTo(p[0], p[1]);
-    ctx.stroke();
-  }
+    function drawAll() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (bgImage) ctx.drawImage(bgImage, 0, 0, canvas.width, canvas.height);
 
-  // ロボット
-  if(robot){
-    ctx.fillStyle = "red";
-    ctx.beginPath();
-    ctx.arc(robot[0], robot[1], 12, 0, Math.PI*2);
-    ctx.fill();
-  }
-}
+      if (smoothLine.length > 1) {
+        ctx.beginPath();
+        ctx.moveTo(smoothLine[0][0], smoothLine[0][1]);
+        for (let pt of smoothLine) ctx.lineTo(pt[0], pt[1]);
+        ctx.strokeStyle = "blue";
+        ctx.lineWidth = parseInt(lineWidthInput.value);
+        ctx.stroke();
+      }
 
-// ---------------- 座標取得 ----------------
-function getPos(e){
-  const rect = cv.getBoundingClientRect();
-  if(e.touches && e.touches.length>0){
-    return [
-      e.touches[0].clientX - rect.left,
-      e.touches[0].clientY - rect.top
-    ];
-  } else {
-    return [
-      e.clientX - rect.left,
-      e.clientY - rect.top
-    ];
-  }
-}
+      if (robot) {
+        ctx.beginPath();
+        ctx.arc(robot.x, robot.y, 8, 0, Math.PI*2);
+        ctx.fillStyle = "red";
+        ctx.fill();
+      }
+    }
 
-// ---------------- 描画イベント ----------------
-let drawing = false;
+    function updateRobot() {
+      if (!moving || !robot || smoothLine.length < 2) return;
+      let target = smoothLine[robot.index+1];
+      let dx = target[0]-robot.x;
+      let dy = target[1]-robot.y;
+      let dist = Math.hypot(dx,dy);
+      let move = parseFloat(speedInput.value);
 
-function startDraw(e){
-  e.preventDefault();
-  drawing = true;
-  allLines = [];
-  currentLine = [];
-  robot = null;
-  robotLine = null;
-  robotIndex = 0;
-  moving = false;
-  currentLine.push(getPos(e));
-}
+      if (dist <= move) {
+        robot.x = target[0];
+        robot.y = target[1];
+        robot.index++;
+        if (robot.index >= smoothLine.length-1) moving = false;
+      } else {
+        robot.x += dx/dist*move;
+        robot.y += dy/dist*move;
+      }
 
-function moveDraw(e){
-  if(!drawing) return;
-  e.preventDefault();
-  let pos = getPos(e);
-  let last = currentLine[currentLine.length-1];
-  if(Math.hypot(pos[0]-last[0], pos[1]-last[1])>2){
-    currentLine.push(pos);
-  }
-}
+      if (bgData) {
+        const x = Math.floor(robot.x);
+        const y = Math.floor(robot.y);
+        if (x>=0 && x<canvas.width && y>=0 && y<canvas.height) {
+          const i = (y*canvas.width+x)*4;
+          const r = bgData.data[i];
+          const g = bgData.data[i+1];
+          const b = bgData.data[i+2];
+          const brightness = (r+g+b)/3;
+          if (brightness < parseInt(wallThresholdInput.value)) {
+            moving = false;
+          }
+        }
+      }
+    }
 
-function endDraw(e){
-  if(drawing && currentLine && currentLine.length>1){
-    allLines.push([...currentLine]);
-    robotLine = [...currentLine];
-    robot = [...currentLine[0]];
-    robotIndex = 0;
-  }
-  currentLine = null;
-  drawing = false;
-}
+    function loop() {
+      if (moving) updateRobot();
+      drawAll();
+      requestAnimationFrame(loop);
+    }
 
-// PC
-cv.addEventListener("mousedown", startDraw);
-cv.addEventListener("mousemove", moveDraw);
-cv.addEventListener("mouseup", endDraw);
+    canvas.addEventListener("mousedown", e=>{
+      drawing = true;
+      line = [[e.offsetX, e.offsetY]];
+      smoothLine = [];
+      moving = false;
+      robot = null;
+    });
+    canvas.addEventListener("mousemove", e=>{
+      if (!drawing) return;
+      line.push([e.offsetX, e.offsetY]);
+      smoothLine = smooth(line);
+      drawAll();
+    });
+    canvas.addEventListener("mouseup", e=>{
+      drawing = false;
+      if (line.length>2) {
+        smoothLine = smooth(line);
+        robot = {x:smoothLine[0][0], y:smoothLine[0][1], index:0};
+      }
+    });
 
-// タッチ
-cv.addEventListener("touchstart", startDraw, {passive:false});
-cv.addEventListener("touchmove", moveDraw, {passive:false});
-cv.addEventListener("touchend", endDraw);
+    // スマホ用
+    canvas.addEventListener("touchstart", e=>{
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      drawing = true;
+      line = [[touch.clientX-rect.left, touch.clientY-rect.top]];
+      smoothLine = [];
+      moving = false;
+      robot = null;
+    });
+    canvas.addEventListener("touchmove", e=>{
+      e.preventDefault();
+      if (!drawing) return;
+      const rect = canvas.getBoundingClientRect();
+      const touch = e.touches[0];
+      line.push([touch.clientX-rect.left, touch.clientY-rect.top]);
+      smoothLine = smooth(line);
+      drawAll();
+    });
+    canvas.addEventListener("touchend", e=>{
+      e.preventDefault();
+      drawing = false;
+      if (line.length>2) {
+        smoothLine = smooth(line);
+        robot = {x:smoothLine[0][0], y:smoothLine[0][1], index:0};
+      }
+    });
 
-// ---------------- ロボット ----------------
-function updateRobot(){
-  if(!moving || !robot || !robotLine) return;
-  if(robotIndex >= robotLine.length-1){ moving=false; return; }
-  let next = robotLine[robotIndex+1];
-  let dx = next[0]-robot[0];
-  let dy = next[1]-robot[1];
-  let dist = Math.hypot(dx,dy);
-  if(dist<=speed){ robot=[...next]; robotIndex++; }
-  else{ robot=[robot[0]+dx/dist*speed, robot[1]+dy/dist*speed]; }
-}
+    document.getElementById("start").onclick = ()=>{ if(robot) moving = true; };
+    document.getElementById("reset").onclick = ()=>{
+      line=[]; smoothLine=[]; robot=null; moving=false;
+      drawAll();
+    };
 
-// ---------------- リセット ----------------
-function reset(){
-  allLines=[];
-  currentLine=null;
-  robot=null;
-  robotLine=null;
-  robotIndex=0;
-  moving=false;
-  draw();
-}
+    document.getElementById("bgUpload").addEventListener("change", e=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const img = new Image();
+      img.onload = ()=>{
+        bgImage = img;
+        ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
+        const temp = document.createElement("canvas");
+        temp.width = canvas.width;
+        temp.height = canvas.height;
+        const tctx = temp.getContext("2d");
+        tctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
+        bgData = tctx.getImageData(0,0,canvas.width,canvas.height);
+      };
+      img.src = URL.createObjectURL(file);
+    });
 
-// ---------------- ループ ----------------
-function loop(){
-  updateRobot();
-  draw();
-  requestAnimationFrame(loop);
-}
-
-loop();
-reset();
-</script>
-
+    loop();
+  </script>
 </body>
 </html>
