@@ -9,8 +9,8 @@
       font-family: sans-serif;
       background:#fafafa;
       position: relative;
-      height: 100vh; /* 画面全体を基準に */
-      overflow: hidden; /* 必要に応じてスクロール防止 */
+      height: 100vh;
+      overflow: hidden;
     }
 
     canvas {
@@ -22,7 +22,7 @@
 
     #controls {
       position: absolute;
-      bottom: 0;   /* 画面下に固定 */
+      bottom: 0;
       left: 0;
       width: 100%;
       background:#eee;
@@ -39,10 +39,11 @@
 
     #credit {
       position: absolute;
-      bottom: 50px; /* controls の上に表示 */
+      bottom: 0;
       right: 10px;
       font-size:14px;
       color: #333;
+      padding: 5px 0;
     }
 
     #credit a { color:blue; text-decoration:none; }
@@ -59,6 +60,8 @@
     <button id="startBtn">スタート</button>
     <button id="resetBtn">リセット</button>
     <input type="file" id="bgPicker" accept="image/*">
+    <button id="clearLineBtn">線を消す</button>
+    <button id="clearBgBtn">背景を消す</button>
   </div>
 
   <div id="credit">
@@ -118,6 +121,23 @@
         draw();
       };
       img.src = URL.createObjectURL(file);
+    };
+
+    // ---- 線を消す ----
+    document.getElementById("clearLineBtn").onclick = () => {
+      linePoints = [];
+      smoothPoints = [];
+      robotPos = null;
+      robotIndex = 0;
+      moving = false;
+      draw();
+    };
+
+    // ---- 背景を消す ----
+    document.getElementById("clearBgBtn").onclick = () => {
+      bgImage = null;
+      bgCtx.clearRect(0,0,bgCanvas.width,bgCanvas.height);
+      draw();
     };
 
     // ---- 線描画（マウス+タッチ両対応）----
