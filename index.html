@@ -6,50 +6,40 @@
   <style>
     body {
       margin:0;
-      font-family: sans-serif;
+      font-family:sans-serif;
       background:#fafafa;
-      position: relative;
-      height: 100vh;
-      overflow: hidden;
+      text-align:center;
     }
 
     canvas {
       border:1px solid #aaa;
-      touch-action:none;
       display:block;
-      margin:0 auto;
+      margin:10px auto;
     }
 
     #controls {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      width: 100%;
-      background:#eee;
       padding:10px;
-      box-sizing: border-box;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-items: center;
-      gap: 10px;
+      background:#eee;
+      display:flex;
+      flex-wrap:wrap;
+      justify-content:center;
+      gap:10px;
     }
 
     label { margin-right:10px; }
 
     #credit {
-      position: absolute;
-      bottom: 0;
-      right: 10px;
+      text-align:right;
       font-size:14px;
-      color: #333;
-      padding: 5px 0;
+      margin:5px 10px;
     }
 
     #credit a { color:blue; text-decoration:none; }
   </style>
 </head>
 <body>
+
+  <h1>ロボットシミュレーション</h1>
 
   <canvas id="canvas" width="800" height="600"></canvas>
 
@@ -88,7 +78,7 @@
     let bgCanvas = document.createElement("canvas");
     let bgCtx = bgCanvas.getContext("2d");
 
-    // ---- UI ----
+    // UI
     document.getElementById("speedSlider").oninput = e => speed = parseFloat(e.target.value);
     document.getElementById("thicknessSlider").oninput = e => lineWidth = parseInt(e.target.value);
     document.getElementById("wallSlider").oninput = e => wallThreshold = parseInt(e.target.value);
@@ -123,7 +113,6 @@
       img.src = URL.createObjectURL(file);
     };
 
-    // ---- 線を消す ----
     document.getElementById("clearLineBtn").onclick = () => {
       linePoints = [];
       smoothPoints = [];
@@ -133,14 +122,12 @@
       draw();
     };
 
-    // ---- 背景を消す ----
     document.getElementById("clearBgBtn").onclick = () => {
       bgImage = null;
       bgCtx.clearRect(0,0,bgCanvas.width,bgCanvas.height);
       draw();
     };
 
-    // ---- 線描画（マウス+タッチ両対応）----
     function getPos(e) {
       if (e.touches) {
         return [e.touches[0].clientX - canvas.getBoundingClientRect().left,
@@ -190,7 +177,6 @@
     canvas.addEventListener("touchmove", moveDraw);
     canvas.addEventListener("touchend", endDraw);
 
-    // ---- 線平滑化 ----
     function smoothLine(points, strength) {
       if (points.length < 3) return points.slice();
       let sm = [points[0]];
@@ -203,7 +189,6 @@
       return sm;
     }
 
-    // ---- ロボット更新 ----
     function updateRobot() {
       if (!moving || !robotPos || !smoothPoints.length) return;
       if (robotIndex >= smoothPoints.length-1) { moving=false; return; }
@@ -220,7 +205,6 @@
         robotPos = [robotPos[0]+dx/dist*move, robotPos[1]+dy/dist*move];
       }
 
-      // 壁判定
       if (bgImage) {
         const x = Math.floor(robotPos[0]);
         const y = Math.floor(robotPos[1]);
@@ -230,12 +214,10 @@
       }
     }
 
-    // ---- 描画 ----
     function draw() {
       ctx.clearRect(0,0,canvas.width,canvas.height);
       if (bgImage) ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
 
-      // 完了線
       if (smoothPoints.length > 1) {
         ctx.beginPath();
         ctx.moveTo(smoothPoints[0][0], smoothPoints[0][1]);
@@ -245,7 +227,6 @@
         ctx.stroke();
       }
 
-      // 描画中線
       if (linePoints.length > 1 && drawing) {
         ctx.beginPath();
         ctx.moveTo(linePoints[0][0], linePoints[0][1]);
@@ -255,7 +236,6 @@
         ctx.stroke();
       }
 
-      // ロボット
       if (robotPos) {
         ctx.beginPath();
         ctx.arc(robotPos[0],robotPos[1],robotRadius,0,Math.PI*2);
