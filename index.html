@@ -4,42 +4,52 @@
   <meta charset="UTF-8">
   <title>ロボットシミュレーション</title>
   <style>
-    body { 
-      margin:0; 
-      font-family: sans-serif; 
-      background:#fafafa; 
-      display: flex;
-      flex-direction: column; /* 上から順に並べる */
-      align-items: center;
+    body {
+      margin:0;
+      font-family: sans-serif;
+      background:#fafafa;
+      position: relative;
+      height: 100vh; /* 画面全体を基準に */
+      overflow: hidden; /* 必要に応じてスクロール防止 */
     }
-    canvas { 
-      border:1px solid #aaa; 
-      touch-action:none; 
-      display:block; 
-      margin-top: 20px;
+
+    canvas {
+      border:1px solid #aaa;
+      touch-action:none;
+      display:block;
+      margin:0 auto;
     }
-    #controls { 
-      padding:10px; 
-      background:#eee; 
-      width: 800px; /* canvasと同じ幅 */
+
+    #controls {
+      position: absolute;
+      bottom: 0;   /* 画面下に固定 */
+      left: 0;
+      width: 100%;
+      background:#eee;
+      padding:10px;
       box-sizing: border-box;
-      margin-top: 10px;
       display: flex;
       flex-wrap: wrap;
+      justify-content: center;
       align-items: center;
-      justify-content: space-around;
+      gap: 10px;
     }
+
     label { margin-right:10px; }
-    #credit { 
-      text-align:right; 
-      font-size:14px; 
-      margin:10px; 
-      width: 800px; /* canvasと同じ幅 */
+
+    #credit {
+      position: absolute;
+      bottom: 50px; /* controls の上に表示 */
+      right: 10px;
+      font-size:14px;
+      color: #333;
     }
+
     #credit a { color:blue; text-decoration:none; }
   </style>
 </head>
 <body>
+
   <canvas id="canvas" width="800" height="600"></canvas>
 
   <div id="controls">
@@ -241,5 +251,6 @@
     }
     loop();
   </script>
+
 </body>
 </html>
