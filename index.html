@@ -2,7 +2,7 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>ロボットシミュレーション共有版</title>
+  <title>PathTrace Controller</title>
   <style>
     body { margin:0; font-family:sans-serif; text-align:center; background:#f0f0f0; }
     #canvas { border:1px solid black; touch-action:none; background:white; }
@@ -12,7 +12,7 @@
   </style>
 </head>
 <body>
-  <h2>ロボットシミュレーション</h2>
+  <h2>PathTrace Controller</h2>
   <canvas id="canvas" width="600" height="400"></canvas>
   <div id="controls">
     <label>速度:
@@ -21,7 +21,7 @@
     <label>線の太さ:
       <input type="range" id="thickness" min="1" max="10" step="1" value="3">
     </label>
-    <label>壁判定しきい値:
+    <label>壁判定の値:
       <input type="range" id="threshold" min="0" max="255" step="5" value="50">
     </label>
     <input type="file" id="bgLoader" accept="image/*">
