@@ -2,175 +2,215 @@
 <html lang="ja">
 <head>
   <meta charset="UTF-8">
-  <title>PathTrace Controller</title>
+  <title>ロボットシミュレーション共有版</title>
   <style>
-    body { margin: 0; text-align: center; background: #fafafa; }
-    canvas { border: 1px solid #000; touch-action: none; background: #fff; }
-    .controls { margin-top: 8px; }
-    .controls label { margin: 0 8px; }
-    .credit {
-      position: fixed; right: 10px; bottom: 10px;
-      font-size: 14px; color: #333;
-      background: rgba(255,255,255,0.7);
-      padding: 4px 8px; border-radius: 6px;
-    }
+    body { margin:0; font-family:sans-serif; text-align:center; background:#f0f0f0; }
+    #canvas { border:1px solid black; touch-action:none; background:white; }
+    #controls { margin:10px; }
+    label { margin:0 10px; }
+    #credit { margin-top:10px; font-size:14px; color:#444; }
   </style>
 </head>
 <body>
-  <h3>PathTrace Controller</h3>
+  <h2>ロボットシミュレーション</h2>
   <canvas id="canvas" width="600" height="400"></canvas>
-  <div class="controls">
-    <label>速度: <input type="range" id="speed" min="0.5" max="10" step="0.5" value="3"></label>
-    <label>線の太さ: <input type="range" id="lineWidth" min="1" max="10" step="1" value="3"></label>
-    <label>壁判定の値: <input type="range" id="wallThreshold" min="0" max="255" step="5" value="50"></label>
-    <br>
+  <div id="controls">
+    <label>速度:
+      <input type="range" id="speed" min="1" max="10" step="1" value="3">
+    </label>
+    <label>線の太さ:
+      <input type="range" id="thickness" min="1" max="10" step="1" value="3">
+    </label>
+    <label>壁判定しきい値:
+      <input type="range" id="threshold" min="0" max="255" step="5" value="50">
+    </label>
+    <input type="file" id="bgLoader" accept="image/*">
     <button id="start">スタート</button>
-    <button id="resetLine">線だけリセット</button>
-    <button id="resetAll">全リセット</button>
-    <input type="file" id="bgUpload" accept="image/*">
+    <button id="reset">リセット</button>
   </div>
+  <div id="credit">作成者: 根津聡太</div>
 
-  <div class="credit">
-    © 2025 <a href="about.html">作成者: 根津聡太</a>
-  </div>
-
+  <script src="/socket.io/socket.io.js"></script>
   <script>
     const canvas = document.getElementById("canvas");
     const ctx = canvas.getContext("2d");
-    let line = [], smoothLine = [], drawing=false;
-    let robot=null, moving=false;
-    let bgImage=null, bgData=null;
+    const socket = io();
 
-    const speedInput = document.getElementById("speed");
-    const lineWidthInput = document.getElementById("lineWidth");
-    const wallThresholdInput = document.getElementById("wallThreshold");
+    let drawing = false;
+    let lastX, lastY;
+    let path = [];
+    let allLines = [];
+    let robot = {x:50,y:50};
+    let moving = false;
+    let speed = 3;
+    let lineWidth = 3;
+    let threshold = 50;
+    let bgImage = null;
+    let bgData = null;
 
-    function smooth(points, strength=0.8) {
-      if (points.length < 3) return points;
-      const sm = [points[0]];
-      for (let i=1; i<points.length-1; i++) {
-        const x = points[i][0]*(1-strength)+0.5*(points[i-1][0]+points[i+1][0])*strength;
-        const y = points[i][1]*(1-strength)+0.5*(points[i-1][1]+points[i+1][1])*strength;
-        sm.push([x,y]);
-      }
-      sm.push(points[points.length-1]);
-      return sm;
-    }
+    // =============== 背景読み込み ===============
+    document.getElementById("bgLoader").addEventListener("change", e=>{
+      const file = e.target.files[0];
+      if (!file) return;
+      const img = new Image();
+      img.onload = ()=>{
+        bgImage = img;
+        ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
+        // ピクセルデータ取得
+        ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
+        bgData = ctx.getImageData(0,0,canvas.width,canvas.height);
+      };
+      img.src = URL.createObjectURL(file);
+    });
 
-    function drawAll() {
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-      if (bgImage) ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
-      if (smoothLine.length>1) {
-        ctx.beginPath();
-        ctx.moveTo(smoothLine[0][0], smoothLine[0][1]);
-        for (let pt of smoothLine) ctx.lineTo(pt[0],pt[1]);
-        ctx.strokeStyle="blue";
-        ctx.lineWidth=parseInt(lineWidthInput.value);
-        ctx.stroke();
-      }
-      if (robot) {
-        ctx.beginPath();
-        ctx.arc(robot.x,robot.y,8,0,Math.PI*2);
-        ctx.fillStyle="red";
-        ctx.fill();
-      }
-    }
-
-    function updateRobot() {
-      if (!moving || !robot || smoothLine.length<2) return;
-      let target=smoothLine[robot.index+1];
-      let dx=target[0]-robot.x, dy=target[1]-robot.y;
-      let dist=Math.hypot(dx,dy), move=parseFloat(speedInput.value);
-      if (dist<=move) {
-        robot.x=target[0]; robot.y=target[1];
-        robot.index++;
-        if (robot.index>=smoothLine.length-1) moving=false;
-      } else {
-        robot.x+=dx/dist*move; robot.y+=dy/dist*move;
-      }
-      if (bgData) {
-        const x=Math.floor(robot.x), y=Math.floor(robot.y);
-        if (x>=0 && x<canvas.width && y>=0 && y<canvas.height) {
-          const i=(y*canvas.width+x)*4;
-          const r=bgData.data[i], g=bgData.data[i+1], b=bgData.data[i+2];
-          const brightness=(r+g+b)/3;
-          if (brightness < parseInt(wallThresholdInput.value)) moving=false;
-        }
-      }
-    }
-
-    function loop() {
-      if (moving) updateRobot();
-      drawAll();
-      requestAnimationFrame(loop);
-    }
-
-    // PC用マウス操作
+    // =============== PC用描画イベント ===============
     canvas.addEventListener("mousedown", e=>{
-      drawing=true; line=[[e.offsetX,e.offsetY]];
-      smoothLine=[]; moving=false; robot=null;
+      drawing = true;
+      lastX = e.offsetX; lastY = e.offsetY;
+      path = [{x:lastX,y:lastY}];
     });
     canvas.addEventListener("mousemove", e=>{
       if (!drawing) return;
-      line.push([e.offsetX,e.offsetY]);
-      smoothLine=smooth(line); drawAll();
+      drawAndSend(e.offsetX, e.offsetY);
     });
-    canvas.addEventListener("mouseup", ()=>{
-      drawing=false;
-      if (line.length>2) {
-        smoothLine=smooth(line);
-        robot={x:smoothLine[0][0], y:smoothLine[0][1], index:0};
-      }
-    });
+    canvas.addEventListener("mouseup", ()=> drawing=false);
+    canvas.addEventListener("mouseleave", ()=> drawing=false);
 
-    // スマホ用タッチ操作
+    // =============== スマホ用描画イベント ===============
     canvas.addEventListener("touchstart", e=>{
       e.preventDefault();
-      const rect=canvas.getBoundingClientRect();
-      const t=e.touches[0];
-      drawing=true; line=[[t.clientX-rect.left,t.clientY-rect.top]];
-      smoothLine=[]; moving=false; robot=null;
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches[0];
+      drawing = true;
+      lastX = t.clientX - rect.left;
+      lastY = t.clientY - rect.top;
+      path = [{x:lastX,y:lastY}];
     });
     canvas.addEventListener("touchmove", e=>{
-      e.preventDefault();
       if (!drawing) return;
-      const rect=canvas.getBoundingClientRect();
-      const t=e.touches[0];
-      line.push([t.clientX-rect.left,t.clientY-rect.top]);
-      smoothLine=smooth(line); drawAll();
+      e.preventDefault();
+      const rect = canvas.getBoundingClientRect();
+      const t = e.touches[0];
+      drawAndSend(t.clientX - rect.left, t.clientY - rect.top);
     });
-    canvas.addEventListener("touchend", ()=>{
-      drawing=false;
-      if (line.length>2) {
-        smoothLine=smooth(line);
-        robot={x:smoothLine[0][0], y:smoothLine[0][1], index:0};
+    canvas.addEventListener("touchend", ()=> drawing=false);
+    canvas.addEventListener("touchcancel", ()=> drawing=false);
+
+    // =============== 線描画と送信 ===============
+    function drawAndSend(x,y){
+      ctx.beginPath();
+      ctx.moveTo(lastX,lastY);
+      ctx.lineTo(x,y);
+      ctx.strokeStyle="blue";
+      ctx.lineWidth=lineWidth;
+      ctx.stroke();
+
+      socket.emit("drawLine",{x1:lastX,y1:lastY,x2:x,y2:y, w:lineWidth});
+      lastX=x; lastY=y;
+      path.push({x,y});
+    }
+
+    // =============== ロボット描画 ===============
+    function drawRobot(){
+      ctx.beginPath();
+      ctx.arc(robot.x,robot.y,10,0,Math.PI*2);
+      ctx.fillStyle="red";
+      ctx.fill();
+    }
+
+    // =============== 壁判定 ===============
+    function isWall(x,y){
+      if(!bgData) return false;
+      if(x<0||y<0||x>=canvas.width||y>=canvas.height) return true;
+      const idx=(y*canvas.width+x)*4;
+      const gray=(bgData.data[idx]+bgData.data[idx+1]+bgData.data[idx+2])/3;
+      return gray<threshold;
+    }
+
+    // =============== アニメーション ===============
+    function animate(){
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      if(bgImage) ctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
+
+      // 線再描画
+      allLines.forEach(line=>{
+        ctx.beginPath();
+        ctx.moveTo(line[0].x,line[0].y);
+        for(let i=1;i<line.length;i++){
+          ctx.lineTo(line[i].x,line[i].y);
+        }
+        ctx.strokeStyle="blue";
+        ctx.lineWidth=lineWidth;
+        ctx.stroke();
+      });
+
+      // ロボット移動
+      if(moving && path.length>0){
+        let target=path[0];
+        let dx=target.x-robot.x, dy=target.y-robot.y;
+        let dist=Math.hypot(dx,dy);
+        if(dist<speed){
+          robot.x=target.x; robot.y=target.y;
+          path.shift();
+        }else{
+          let nx=robot.x+dx/dist*speed;
+          let ny=robot.y+dy/dist*speed;
+          if(isWall(Math.round(nx),Math.round(ny))){
+            moving=false;
+          }else{
+            robot.x=nx; robot.y=ny;
+          }
+        }
+        socket.emit("moveRobot",robot);
       }
-    });
+      drawRobot();
+      requestAnimationFrame(animate);
+    }
+    animate();
 
-    document.getElementById("start").onclick=()=>{ if(robot) moving=true; };
-    document.getElementById("resetLine").onclick=()=>{
-      line=[]; smoothLine=[]; robot=null; moving=false; drawAll();
+    // =============== UI操作 ===============
+    document.getElementById("start").onclick=()=>{
+      if(path.length>0){
+        allLines.push([...path]);
+        moving=true;
+      }
     };
-    document.getElementById("resetAll").onclick=()=>{
-      line=[]; smoothLine=[]; robot=null; moving=false;
-      bgImage=null; bgData=null; drawAll();
+    document.getElementById("reset").onclick=()=>{
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      allLines=[];
+      path=[];
+      robot={x:50,y:50};
+      moving=false;
+      bgImage=null; bgData=null;
+      socket.emit("reset");
+    };
+    document.getElementById("speed").oninput=e=>{
+      speed=parseInt(e.target.value);
+    };
+    document.getElementById("thickness").oninput=e=>{
+      lineWidth=parseInt(e.target.value);
+    };
+    document.getElementById("threshold").oninput=e=>{
+      threshold=parseInt(e.target.value);
     };
 
-    document.getElementById("bgUpload").addEventListener("change", e=>{
-      const file=e.target.files[0]; if (!file) return;
-      const img=new Image();
-      img.onload=()=>{
-        bgImage=img;
-        const temp=document.createElement("canvas");
-        temp.width=canvas.width; temp.height=canvas.height;
-        const tctx=temp.getContext("2d");
-        tctx.drawImage(bgImage,0,0,canvas.width,canvas.height);
-        bgData=tctx.getImageData(0,0,canvas.width,canvas.height);
-      };
-      img.src=URL.createObjectURL(file);
+    // =============== サーバーイベント ===============
+    socket.on("drawLine",d=>{
+      ctx.beginPath();
+      ctx.moveTo(d.x1,d.y1);
+      ctx.lineTo(d.x2,d.y2);
+      ctx.strokeStyle="blue";
+      ctx.lineWidth=d.w;
+      ctx.stroke();
     });
-
-    loop();
+    socket.on("moveRobot",d=>{
+      robot=d;
+    });
+    socket.on("reset",()=>{
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      allLines=[]; path=[]; robot={x:50,y:50};
+      moving=false; bgImage=null; bgData=null;
+    });
   </script>
 </body>
 </html>
