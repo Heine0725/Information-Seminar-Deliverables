@@ -8,14 +8,18 @@
       margin:0;
       font-family:sans-serif;
       background:#fafafa;
-      text-align:center;
+      display:flex;
+      flex-direction:column;
+      height:100vh;
     }
 
     h1 {
-      margin:10px 0;
+      margin:10px;
+      text-align:center;
     }
 
-    canvas {
+    #canvas {
+      flex:1;
       border:1px solid #aaa;
       display:block;
       margin:0 auto;
@@ -28,15 +32,18 @@
       flex-wrap:wrap;
       justify-content:center;
       gap:10px;
-      margin-top:10px;
+      position:fixed;
+      bottom:30px;
+      left:0;
+      width:100%;
+      box-shadow:0 -2px 5px rgba(0,0,0,0.1);
     }
 
-    label { margin-right:10px; }
-
     #credit {
-      text-align:right;
+      position:fixed;
+      bottom:5px;
+      right:10px;
       font-size:14px;
-      margin:5px 10px;
     }
 
     #credit a { color:blue; text-decoration:none; }
@@ -51,7 +58,7 @@
   <div id="controls">
     <label>速度: <input type="range" id="speedSlider" min="0.5" max="10" step="0.5" value="3"></label>
     <label>太さ: <input type="range" id="thicknessSlider" min="1" max="10" step="1" value="3"></label>
-    <label>壁判定閾値: <input type="range" id="wallSlider" min="0" max="255" step="5" value="50"></label>
+    <label>壁判定の値: <input type="range" id="wallSlider" min="0" max="255" step="5" value="50"></label>
     <button id="startBtn">スタート</button>
     <button id="resetBtn">リセット</button>
     <input type="file" id="bgPicker" accept="image/*">
@@ -60,7 +67,7 @@
   </div>
 
   <div id="credit">
-   © 2025 <a href="about.html">作成者: 根津聡太</a>
+    作成者: <a href="about.html target="_blank">根津聡太</a>
   </div>
 
   <script>
@@ -133,7 +140,7 @@
       draw();
     };
 
-    // ---- 描画座標取得 ----
+    // ---- 線描画 ----
     function getPos(e) {
       if (e.touches) {
         return [e.touches[0].clientX - canvas.getBoundingClientRect().left,
